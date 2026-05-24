@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>IoT Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: #0f1117;
+  color: #e0e0e0;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  grid-template-rows: 52px 1fr;
+  height: 100vh;
+  overflow: hidden;
+}
+header {
+  grid-column: 1 / -1;
+  background: #1a1d27;
+  border-bottom: 1px solid #2a2d3a;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 10px;
+}
+header h1 { font-size: 1rem; font-weight: 600; color: #fff; }
+header .live { font-size: 0.75rem; color: #4ade80; }
+header .dot { width:7px;height:7px;border-radius:50%;background:#4ade80;display:inline-block; }
+sidebar {
+  background: #1a1d27;
+  border-right: 1px solid #2a2d3a;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+}
+.section-label {
+  font-size: 0.7rem;
+  color: #555;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  padding: 0 4px;
+}
+.stat-card {
+  background: #0f1117;
+  border: 1px solid #2a2d3a;
+  border-radius: 8px;
+  padding: 12px;
+}
+.stat-card .label { font-size: 0.7rem; color: #666; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+.stat-card .value { font-size: 1.6rem; font-weight: 700; }
+.stat-card .bar { height: 3px; background: #2a2d3a; border-radius: 2px; margin-top: 8px; }
+.stat-card .bar-fill { height: 100%; border-radius: 2px; transition: width 0.5s; }
+.alert-card {
+  background: #1f0f0f;
+  border: 1px solid #5a1a1a;
+  border-radius: 8px;
+  padding: 12px;
+}
+.alert-card .label { font-size: 0.7rem; color: #f87171; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+.alert-card .value { font-size: 1.6rem; font-weight: 700; color: #f87171; }
+.device-list { display: flex; flex-direction: column; gap: 6px; }
+.device-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 7px;
+  border: 1px solid #2a2d3a;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  background: #0f1117;
+}
+.device-item:hover { background: #1f2230; }
+.device-item.active { background: #1e2a40; border-color: #3b82f6; }
+.device-dot { width:7px;height:7px;border-radius:50%;flex-shrink:0; }
+.device-name { font-size: 0.82rem; flex:1; }
+.device-badge {
+  font-size: 0.65rem;
+  padding: 2px 7px;
+  border-radius: 20px;
+  font-weight: 600;
+}
+.device-badge.online  { background:#14532d; color:#4ade80; }
+.device-badge.offline { background:#450a0a; color:#f87171; }
+main {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+.chart-card {
+  background: #1a1d27;
+  border: 1px solid #2a2d3a;
+  border-radius: 10px;
+  padding: 16px;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.chart-title { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+.tf-select {
+  background: #0f1117;
+  border: 1px solid #2a2d3a;
+  color: #ccc;
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+}
+.tf-select:focus { border-color: #3b82f6; }
+.chart-wrap { position: relative; }
+canvas { width: 100% !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="dot"></span>
+  <h1>IoT Sensor Dashboard</h1>
+  <span class="live">LIVE</span>
+</header>
+
+<sidebar>
+  <div class="section-label">Readings</div>
+
+  <div class="stat-card">
+    <div class="label">Temperature</div>
+    <div class="value" id="temp-val" style="color:#f97316;">--<span style="font-size:1rem;color:#888;"> °C</span></div>
+    <div class="bar"><div class="bar-fill" id="temp-bar" style="background:#f97316;width:0%;"></div></div>
+  </div>
+
+  <div class="stat-card">
+    <div class="label">Humidity</div>
+    <div class="value" id="hum-val" style="color:#38bdf8;">--<span style="font-size:1rem;color:#888;"> %</span></div>
+    <div class="bar"><div class="bar-fill" id="hum-bar" style="background:#38bdf8;width:0%;"></div></div>
+  </div>
+
+  <div class="alert-card" id="alert-card" style="display:none;">
+    <div class="label">⚠ Alert</div>
+    <div class="value" style="font-size:0.85rem;" id="alert-msg">Threshold exceeded</div>
+  </div>
+
+  <div class="section-label" style="margin-top:6px;">Devices</div>
+  <div class="device-list" id="device-list"></div>
+</sidebar>
+
+<main>
+  <div class="chart-card">
+    <div class="chart-header">
+      <span class="chart-title" id="temp-chart-title">Temperature</span>
+      <select class="tf-select" id="tf-temp" onchange="onTimeframeChange('temp')">
+        <option value="1h">1 Hour</option>
+        <option value="1d">1 Day</option>
+        <option value="1w">1 Week</option>
+        <option value="1m">1 Month</option>
+      </select>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="tempChart" height="120"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-header">
+      <span class="chart-title" id="hum-chart-title">Humidity</span>
+      <select class="tf-select" id="tf-hum" onchange="onTimeframeChange('hum')">
+        <option value="1h">1 Hour</option>
+        <option value="1d">1 Day</option>
+        <option value="1w">1 Week</option>
+        <option value="1m">1 Month</option>
+      </select>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="humChart" height="120"></canvas>
+    </div>
+  </div>
+</main>
+
+<script>
+let activeDevice = 'living_room';
+let tfTemp = '1h';
+let tfHum  = '1h';
+
+function formatTimestamp(ts, timeframe) {
+  const d = new Date(ts * 1000);
+  if (timeframe === '1h') return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  if (timeframe === '1d') return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  if (timeframe === '1w') return d.toLocaleDateString([], {weekday:'short'}) + ' ' + d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  if (timeframe === '1m') return d.toLocaleDateString([], {month:'short', day:'numeric'});
+  return d.toLocaleTimeString();
+}
+
+const tooltipPlugin = {
+  id: 'hoverTooltip',
+};
+
+const commonOptions = (color, timeframe) => ({
+  responsive: true,
+  animation: false,
+  interaction: { mode: 'index', intersect: false },
+  plugins: {
+    legend: { display: false },
+    tooltip: {
+      backgroundColor: '#1a1d27',
+      borderColor: '#2a2d3a',
+      borderWidth: 1,
+      titleColor: '#888',
+      bodyColor: '#fff',
+      padding: 10,
+      callbacks: {
+        title: (items) => formatTimestamp(items[0].parsed.x_raw ?? items[0].label, timeframe)
+      }
+    }
+  },
+  scales: {
+    x: {
+      ticks: { color: '#cccccc', font: { size: 10 }, maxTicksLimit: 8, maxRotation: 0 },
+      grid: { color: '#1e2230' }
+    },
+    y: {
+      ticks: { color: '#cccccc', font: { size: 10 } },
+      grid: { color: '#1e2230' }
+    }
+  },
+  elements: { point: { radius: 0, hoverRadius: 4 }, line: { tension: 0.4 } }
+});
+
+const tempChart = new Chart(document.getElementById('tempChart').getContext('2d'), {
+  type: 'line',
+  data: { labels: [], datasets: [{ data: [], borderColor: '#f97316', backgroundColor: 'rgba(249,115,22,0.08)', fill: true, borderWidth: 2 }] },
+  options: commonOptions('#f97316', '1h')
+});
+
+const humChart = new Chart(document.getElementById('humChart').getContext('2d'), {
+  type: 'line',
+  data: { labels: [], datasets: [{ data: [], borderColor: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.08)', fill: true, borderWidth: 2 }] },
+  options: commonOptions('#38bdf8', '1h')
+});
+
+async function fetchData() {
+  const [rTemp, rHum] = await Promise.all([
+    fetch(`/data?device=${activeDevice}&timeframe=${tfTemp}`).then(r => r.json()),
+    fetch(`/data?device=${activeDevice}&timeframe=${tfHum}`).then(r => r.json()),
+  ]);
+
+  // Sidebar stats (always from 1h latest)
+  document.getElementById('temp-val').innerHTML = rTemp.latest_temp + '<span style="font-size:1rem;color:#888;"> °C</span>';
+  document.getElementById('hum-val').innerHTML  = rTemp.latest_hum  + '<span style="font-size:1rem;color:#888;"> %</span>';
+  const tempPct = Math.min(100, Math.max(0, ((rTemp.latest_temp - 15) / 20) * 100));
+  const humPct  = Math.min(100, Math.max(0, ((rTemp.latest_hum  - 30) / 50) * 100));
+  document.getElementById('temp-bar').style.width = tempPct + '%';
+  document.getElementById('hum-bar').style.width  = humPct  + '%';
+
+  const alertCard = document.getElementById('alert-card');
+  const alertMsg  = document.getElementById('alert-msg');
+  if (rTemp.alert) {
+    alertCard.style.display = 'block';
+    if (rTemp.latest_temp > 30) alertMsg.textContent = 'High temperature!';
+    else if (rTemp.latest_temp < 17) alertMsg.textContent = 'Low temperature!';
+    else if (rTemp.latest_hum > 75)  alertMsg.textContent = 'High humidity!';
+    else alertMsg.textContent = 'Low humidity!';
+  } else {
+    alertCard.style.display = 'none';
+  }
+
+  // Update temp chart
+  const tempLabels = rTemp.timestamps.map(ts => formatTimestamp(ts, tfTemp));
+  tempChart.data.labels = tempLabels;
+  tempChart.data.datasets[0].data = rTemp.temperature;
+  tempChart.options.plugins.tooltip.callbacks.title = (items) => formatTimestamp(rTemp.timestamps[items[0].dataIndex], tfTemp);
+  tempChart.update();
+
+  // Update hum chart
+  const humLabels = rHum.timestamps.map(ts => formatTimestamp(ts, tfHum));
+  humChart.data.labels = humLabels;
+  humChart.data.datasets[0].data = rHum.humidity;
+  humChart.options.plugins.tooltip.callbacks.title = (items) => formatTimestamp(rHum.timestamps[items[0].dataIndex], tfHum);
+  humChart.update();
+
+  // Update device list
+  const list = document.getElementById('device-list');
+  list.innerHTML = rTemp.devices.map(d => `
+    <div class="device-item ${d.id === activeDevice ? 'active' : ''}" onclick="selectDevice('${d.id}')">
+      <div class="device-dot" style="background:${d.status === 'online' ? '#4ade80' : '#f87171'};"></div>
+      <span class="device-name">${d.name}</span>
+      <span class="device-badge ${d.status}">${d.status}</span>
+    </div>
+  `).join('');
+}
+
+function selectDevice(id) {
+  activeDevice = id;
+  const device = document.querySelector(`.device-item[onclick="selectDevice('${id}')"]`);
+  const isOffline = device && device.querySelector('.device-badge.offline');
+  document.querySelectorAll('.chart-card').forEach(c => {
+    c.style.opacity = isOffline ? '0.4' : '1';
+    c.style.pointerEvents = isOffline ? 'none' : 'auto';
+  });
+  fetchData();
+}
+
+function onTimeframeChange(chart) {
+  if (chart === 'temp') tfTemp = document.getElementById('tf-temp').value;
+  else                  tfHum  = document.getElementById('tf-hum').value;
+  fetchData();
+}
+
+fetchData();
+setInterval(fetchData, 2000);
+</script>
+</body>
+</html>
